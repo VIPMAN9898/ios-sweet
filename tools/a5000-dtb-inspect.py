@@ -6,6 +6,7 @@ to label Qualcomm reference-board DTBs as OnePlus 5 hardware.
 """
 import argparse
 import json
+import re
 import struct
 import sys
 
@@ -74,11 +75,16 @@ def parse(blob):
     return root["children"][0]
 
 
-def walk(node, path=""):
-    here = path + "/" + node["name"] if path else "/"
-    yield here, node
+def walk(node, path=None, parent_cells=(2, 1)):
+    if path is None:
+        here = "/"
+    else:
+        here = path.rstrip("/") + "/" + node["name"]
+    yield here, node, parent_cells
+    child_cells = (prop_u32(node, "#address-cells") or parent_cells[0],
+                   prop_u32(node, "#size-cells") if prop_u32(node, "#size-cells") is not None else parent_cells[1])
     for child in node["children"]:
-        yield from walk(child, here.rstrip("/"))
+        yield from walk(child, here, child_cells)
 
 
 def cstrings(raw):
@@ -134,43 +140,62 @@ def main():
                           "model": cstrings(rootp.get("model")), "compatible": compatibles}, indent=2))
         return 2
 
-    address_cells = prop_u32(root, "#address-cells") or 2
-    size_cells = prop_u32(root, "#size-cells") or 1
     mem = []
     reserved = []
     cpus = []
     gic = []
     ufs = []
     displays = []
-    for path, node in nodes:
+    for path, node, parent_cells in nodes:
         p = node["props"]
         comp = cstrings(p.get("compatible"))
-        if p.get("device_type") == b"memory\0" or node["name"].startswith("memory@"):
-            mem.extend({"path": path, **r} for r in reg_ranges(node, address_cells, size_cells))
+        if p.get("device_type") == b"memory\0" or (path.count("/") == 1 and node["name"].startswith("memory@")):
+            mem.extend({"path": path, **r} for r in reg_ranges(node, *parent_cells))
         if path.startswith("/reserved-memory/") and p.get("reg"):
-            reserved.extend({"path": path, **r} for r in reg_ranges(node, address_cells, size_cells))
+            reserved.extend({"path": path, **r} for r in reg_ranges(node, *parent_cells))
         if p.get("device_type") == b"cpu\0":
-            cpus.append({"path": path, "compatible": comp, "mpidr_cells": cells(p.get("reg"))})
+            cpus.append({"path": path, "compatible": comp,
+                         "mpidr_cells": cells(p.get("reg")),
+                         "reg": reg_ranges(node, *parent_cells)})
         if any("gic" in x.lower() for x in comp):
             gic.append({"path": path, "compatible": comp,
-                        "reg": reg_ranges(node, address_cells, size_cells)})
+                        "reg": reg_ranges(node, *parent_cells)})
         if any("ufshc" in x.lower() or "ufs" in x.lower() for x in comp) or "ufshc@" in node["name"]:
             ufs.append({"path": path, "compatible": comp,
-                        "reg": reg_ranges(node, address_cells, size_cells)})
+                        "reg": reg_ranges(node, *parent_cells)})
         if any(x in " ".join(comp).lower() for x in ("framebuffer", "simple-framebuffer")) or "framebuffer@" in node["name"]:
             displays.append({"path": path, "compatible": comp,
-                             "reg": reg_ranges(node, address_cells, size_cells),
+                             "reg": reg_ranges(node, *parent_cells),
                              "width": prop_u32(node, "width"), "height": prop_u32(node, "height"),
                              "stride": prop_u32(node, "stride"),
                              "format": cstrings(p.get("format"))})
+
+    chosen = next((n for path, n, _ in nodes if path == "/chosen"), None)
+    bootargs = cstrings(chosen["props"].get("bootargs"))[0] if chosen and chosen["props"].get("bootargs") else ""
+    active_panel_match = re.search(r"mdss_mdp\.panel=[^: ]*:[^: ]*:[^: ]*:([^: ]+)", bootargs)
+    active_panel_name = active_panel_match.group(1) if active_panel_match else None
+    panels = []
+    for path, node, _ in nodes:
+        p = node["props"]
+        if "qcom,mdss-dsi-panel-name" in p:
+            panels.append({
+                "path": path,
+                "panel_name": cstrings(p.get("qcom,mdss-dsi-panel-name")),
+                "width": prop_u32(node, "qcom,mdss-dsi-panel-width"),
+                "height": prop_u32(node, "qcom,mdss-dsi-panel-height"),
+                "bpp": prop_u32(node, "qcom,mdss-dsi-bpp"),
+                "refresh_hz": prop_u32(node, "qcom,mdss-dsi-panel-framerate"),
+                "active": bool(active_panel_name and path.rsplit("/", 1)[-1] == active_panel_name),
+            })
 
     result = {
         "status": "oneplus-board-tree" if is_oneplus else "reference-tree-only",
         "model": cstrings(rootp.get("model")), "compatible": compatibles,
         "board_id_cells": cells(rootp.get("qcom,board-id")),
         "memory": mem, "reserved_memory": reserved, "cpus": cpus,
-        "psci_method": next((cstrings(n["props"].get("method")) for path, n in nodes if path == "/psci"), []),
+        "psci_method": next((cstrings(n["props"].get("method")) for path, n, _ in nodes if path == "/psci"), []),
         "interrupt_controllers": gic, "ufs": ufs, "display_nodes": displays,
+        "active_panel_node": active_panel_name, "display_panels": panels,
         "build_ready": bool(is_oneplus and mem and reserved and cpus and gic and ufs and displays),
     }
     print(json.dumps(result, indent=2))

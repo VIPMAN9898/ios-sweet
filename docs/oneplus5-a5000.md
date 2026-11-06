@@ -27,6 +27,30 @@ The available reference sources narrow the target, but do not yet establish the 
 
 Treat these as reference values only. Before using them in a build, obtain or read the A5000's actual bootloader FDT/overlay and verify its RAM banks, reservations, and controller handoff state. Keep private dumps and serial numbers out of Git. Do not add guessed hardware values.
 
+## TWRP live-tree capture (2026-11-06)
+
+TWRP exposed root ADB as product `ONEPLUS_A5000`, device `cheeseburger`. While
+in TWRP, `/sys/firmware/fdt` was copied read-only to
+`/tmp/a5000-firmware/twrp-live.dtb`. The root compatible still says generic
+`qcom,msm8998-mtp`; the following are observations from that runtime tree and
+apply to the connected A5000 recovery environment:
+
+- RAM banks: `0x40000000` + `0xc0000000`, and `0x100000000` + `0xbd8c0000`.
+- PSCI conduit: `smc`; eight CPU MPIDRs are `0x0`–`0x3` and `0x100`–`0x103`.
+- GICv3 distributor: `0x17a00000` (size `0x10000`); redistributor region:
+  `0x17b00000` (size `0x100000`). UFS host: `0x1da4000` (size `0x2500`).
+- Reserved splash buffer: `0x9d400000` (size `0x2400000`). The recovery
+  bootargs select the Samsung S6E3FA5 1080p command-mode panel; its FDT node
+  gives 1080×1920, 24 bpp, 60 Hz. Pixel layout and framebuffer stride still
+  need confirmation before using this for a shim console.
+
+This is a useful recovery-kernel handoff tree, not yet proof that Fastboot's
+`fastboot boot` path supplies the same overlay. The full target is still not
+image-build-ready: the A5000 XNU platform/driver adaptation and boot-chain
+packaging remain. The tree was kept in `/tmp`, not committed. `adb reboot
+bootloader` returned the phone to Fastboot without pressing its buttons; no
+partition was written.
+
 `tools/a5000-dtb-inspect.py` is the host-side intake tool for that evidence. It
 summarizes RAM, reserved memory, CPUs, PSCI, interrupt controllers, UFS, and
 display nodes. By default it exits with a rejection unless the root compatible
