@@ -51,6 +51,20 @@ jobs:
           cp xnu/patches/*.patch xnu/patches/*.sh dxb/patches/
           # libfirehose_kernel is built arm64e-only; the SWEET kernel is plain arm64
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
+          # A5000 shares SWEET's open-source assembly/pmap feature set. Create
+          # the config alias after the SWEET config patches have been applied.
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("dxb/build.sh")
+          text = path.read_text()
+          marker = '        cd "${WORK_DIR}"\n    fi\n}\n\nbuild_bootstrap_cmds()'
+          replacement = ('        if [[ "${MACHINE_CONFIG}" == A5000 ]]; then\n'
+                         '            ln -s MASTER.arm64.sweet "${WORK_DIR}/xnu/config/MASTER.arm64.a5000"\n'
+                         '        fi\n' + marker)
+          if text.count(marker) != 1:
+              raise SystemExit("Could not locate XNU patch completion hook in build.sh")
+          path.write_text(text.replace(marker, replacement))
+          PY
           grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
           ls dxb/patches
 
