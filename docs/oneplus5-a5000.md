@@ -27,6 +27,13 @@ The available reference sources narrow the target, but do not yet establish the 
 
 Treat these as reference values only. Before using them in a build, obtain or read the A5000's actual bootloader FDT/overlay and verify its RAM banks, reservations, and controller handoff state. Keep private dumps and serial numbers out of Git. Do not add guessed hardware values.
 
+`tools/a5000-dtb-inspect.py` is the host-side intake tool for that evidence. It
+summarizes RAM, reserved memory, CPUs, PSCI, interrupt controllers, UFS, and
+display nodes. By default it exits with a rejection unless the root compatible
+contains `oneplus,cheeseburger`; `--allow-reference` is only for inspecting a
+comparison tree. Running it on OTA DTB 10 reports the matching board-ID tuple,
+but the root is still Qualcomm MSM8998 MTP and the tree is not build-ready.
+
 From that DTB and boot-chain evidence, record only verified values for:
 
 1. RAM banks and reserved regions, including the bootloader framebuffer and payload placement constraints.
