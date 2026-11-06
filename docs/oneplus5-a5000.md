@@ -51,6 +51,13 @@ packaging remain. The tree was kept in `/tmp`, not committed. `adb reboot
 bootloader` returned the phone to Fastboot without pressing its buttons; no
 partition was written.
 
+The user then installed stock OxygenOS/Android 10 and authorized ADB. Stock
+Android independently reports model `ONEPLUS A5000`, device `OnePlus5`, and
+release `10`. ADB runs as the unprivileged shell user; reads of
+`/sys/firmware/fdt` and `/proc/device-tree` are denied there. The phone is
+currently online over authorized ADB, so retain this connection for further
+read-only checks unless Fastboot is specifically needed.
+
 `tools/a5000-dtb-inspect.py` is the host-side intake tool for that evidence. It
 summarizes RAM, reserved memory, CPUs, PSCI, interrupt controllers, UFS, and
 display nodes. By default it exits with a rejection unless the root compatible
