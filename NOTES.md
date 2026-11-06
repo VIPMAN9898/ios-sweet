@@ -2,7 +2,7 @@
 
 **A5000 build handoff (2026-11-06):** GitHub account `VIPMAN9898` cannot push to upstream `dipa-studio/ios-sweet`, so work is on public fork `VIPMAN9898/ios-sweet`, branch `codex/a5000-xnu-20261106`; upstream `main` remains unchanged. The user enabled Actions. Run `42175229755` was cancelled because `macos-14` retired; workflow now uses `macos-15-intel`. Runs `42175575084` and `42176551011` exposed and resolved config-patch and BearSSL-staging issues. Run `42178438268` reached final link but failed with 269 unresolved symbols. Current fix is described below. No A5000 XNU payload or boot image exists, and no phone action occurred.
 
-**Latest build investigation (2026-11-06):** A5000 run `42178438268` first failed at final link with 269 unresolved symbols. Reusing the patched Sweet master config in A5000 run `42181387965` reduced this to seven unresolved symbols: BearSSL SHA-384/512 and the Sweet AMFI/UFS/log functions. Their source files compiled but their code was preprocessed out because the A5000 flags did not define `ARM64_BOARD_CONFIG_SWEET`. The next fix adds that shared board macro to the A5000 compiler flags; test with another build. No phone action occurred.
+**Latest build (2026-11-06):** A5000 run `42182906394` succeeded after reusing the patched Sweet master config and defining `ARM64_BOARD_CONFIG_SWEET` for shared code. It produced `kernel.development.a5000`, a 17,187,688-byte ARM64 Mach-O with SHA-256 `aaf34e71ae8f3d0e10b39e6c5506610c2299f3370d76ed9a81efa1be4ab05dd8`. The kernel and checksum are copied to the Codex task outputs. This is an XNU development kernel only, not a complete boot image/loader; do not flash it directly. The connected phone has not been modified.
 
 ## New target handoff: OnePlus 5 (A5000) — 2026-11-06
 
