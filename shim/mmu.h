@@ -1,7 +1,9 @@
 #pragma once
 #include <stdint.h>
 
-#define FB_PHYS	0x9c000000UL
+#ifndef FB_PHYS
+#define FB_PHYS	0x9c000000UL	/* sweet reserved-memory cont_splash_region */
+#endif
 
 struct mmu_info {
 	uint64_t img_lo, img_hi, ttbr;

@@ -14,6 +14,8 @@ Observed read-only device facts in this session: the user reports model A5000; F
 
 The pre-existing `sweet` handoff below remains the source of truth for the Redmi Note 10 Pro work; do not treat its phone images or active tasks as A5000 artifacts.
 
+**2026-11-06 A5000 shim milestone:** added `shim/build-a5000.sh` and made the framebuffer/GIC/UFS shim addresses selectable at compile time without changing Sweet defaults. `bash shim/build-a5000.sh --shim-only` compiled and linked the A5000 shim successfully (180 KiB, SHA-256 `6caa67b0f4353a915bdc3a6b96b5cfcecb4ff59becce8e170a5114b2e4c0f78b`). This output contains no XNU payload and is not a boot image. The connected GitHub integration reports `dipa-studio/ios-sweet` as pull-only (`push=false`); branch creation returned HTTP 403, so no A5000 CI run is available yet. The user explicitly approved pushing to run the build; ask them to grant write access or connect an account/app installation with repository write permission. The phone remains on Android with its display awake; no phone image was sent.
+
 
 ## Agent handoff / active work (2026-10-15, latest)
 

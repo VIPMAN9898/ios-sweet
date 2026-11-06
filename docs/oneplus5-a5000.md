@@ -154,6 +154,13 @@ installation path still need separate validation. In particular, the current
 touch implementation is for different hardware; a successful kernel build or
 blue diagnostic screen does not establish a usable iOS port.
 
+`shim/build-a5000.sh --shim-only` compiles and links the OnePlus-specific shim
+to `shim/out-a5000/Image`. Once an A5000 XNU payload exists, the full command
+is `shim/build-a5000.sh LIVE_FDT XNU_PAYLOAD`; that packages an Android boot
+header v2 image with the supplied live FDT. Both outputs stay under the
+ignored A5000 output directory by default. There is no XNU payload yet, so no
+boot image was packaged.
+
 Then create a `cheeseburger` target profile and keep its generated ADT, shim image, and build output separate from `sweet`. Only after a host-side build and review of the extracted values should a temporary boot test be planned.
 
 ## Device safety boundary

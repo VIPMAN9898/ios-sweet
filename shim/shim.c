@@ -16,8 +16,12 @@
 #define RESTART_BOOTLOADER	0x77665500U
 #define PSHOLD			0x0c264000UL
 
+#ifndef GICD_BASE
 #define GICD_BASE		0x17a00000UL
+#endif
+#ifndef GICR_BASE
 #define GICR_BASE		0x17a60000UL
+#endif
 #define GICR_SIZE		0x100000UL
 #define GICR_PE_SIZE		0x20000UL
 #define GICR_TYPER		0x08
