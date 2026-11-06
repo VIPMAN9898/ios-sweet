@@ -1,5 +1,7 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+**Latest A5000 handoff (2026-11-06):** GitHub account `VIPMAN9898` cannot push to upstream `dipa-studio/ios-sweet`, so a public fork `VIPMAN9898/ios-sweet` was created. Local commits `e352a5a..b379008` were pushed to `codex/a5000-xnu-20261106`; upstream `main` remains unchanged. The user enabled Actions on the fork. A manually dispatched A5000 build (run `42175229755`) was cancelled immediately because the GitHub-hosted `macos-14` runner retired on 2026-11-02. The workflow is being migrated to supported `macos-15-intel`; Xcode 16 compatibility remains unverified. No XNU payload or boot image exists, and no phone action occurred. Next: commit/push the runner migration, dispatch `machine_config=A5000`, inspect build output, and package a temporary image only if an A5000 kernel is produced.
+
 ## New target handoff: OnePlus 5 (A5000) — 2026-11-06
 
 The user asked to start adapting this project for their OnePlus 5, model A5000. Keep the existing `sweet` (Redmi Note 10 Pro / SM7150) port intact and develop a separate `cheeseburger` / MSM8998 target. The current checkout's shim, ADT generator, memory map, display and UFS addresses, and XNU patches contain `sweet`-specific assumptions; do not reuse its boot image or hardware constants for A5000.
