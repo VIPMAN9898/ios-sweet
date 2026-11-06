@@ -1,0 +1,111 @@
+diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
+--- a/makedefs/MakeInc.def
++++ b/makedefs/MakeInc.def
+@@ -32,5 +32,5 @@ ifneq ($(findstring _host,$(RC_ProjectName)),)
+ SUPPORTED_ARM64_MACHINE_CONFIGS = NONE
+ else
+-SUPPORTED_ARM64_MACHINE_CONFIGS = BCM2837 T6000 T8101 T8103 VMAPPLE SWEET
++SUPPORTED_ARM64_MACHINE_CONFIGS = BCM2837 T6000 T8101 T8103 VMAPPLE SWEET A5000
+ 
+ endif
+@@ -62,6 +62,7 @@ MACHINE_FLAGS_ARM64_T6000 = -DARM64_BOARD_CONFIG_T6000 		-mcpu=apple-a14
+ MACHINE_FLAGS_ARM64_VMAPPLE = -DARM64_BOARD_CONFIG_VMAPPLE              -march=armv8.5a
+ MACHINE_FLAGS_ARM64_BCM2837 = -DARM64_BOARD_CONFIG_BCM2837
+ MACHINE_FLAGS_ARM64_SWEET = -DARM64_BOARD_CONFIG_SWEET                -march=armv8.2-a+crypto
++MACHINE_FLAGS_ARM64_A5000 = -DARM64_BOARD_CONFIG_A5000                -march=armv8-a+crypto
+ 
+ 
+ #
+@@ -262,6 +263,6 @@ export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := $(shell echo $(CURRENT_ARCH_CONFIG) | tr A-Z a-z)
+ ifneq ($(filter arm64,$(ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG)),)
+ # SWEET/A5000 ARMv8 CPUs have no pointer authentication: stay plain arm64
+-ifneq ($(CURRENT_MACHINE_CONFIG),SWEET)
++ifeq ($(filter SWEET A5000,$(CURRENT_MACHINE_CONFIG)),)
+ export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := arm64e
+ endif
+ endif
+diff --git a/pexpert/pexpert/arm64/board_config.h b/pexpert/pexpert/arm64/board_config.h
+--- a/pexpert/pexpert/arm64/board_config.h
++++ b/pexpert/pexpert/arm64/board_config.h
+@@ -108,6 +108,16 @@
+ 
+ #endif  /* ARM64_BOARD_CONFIG_SWEET */
+ 
++#ifdef ARM64_BOARD_CONFIG_A5000
++#include <pexpert/arm64/A5000.h>
++/* Reuse the existing Qualcomm GIC/PSCI bring-up and generic iOS services. */
++#define ARM64_BOARD_CONFIG_SWEET 1
++#define MAX_L2_CLINE                   6
++#define MAX_CPUS                       8
++#define MAX_CPU_CLUSTERS               2
++#define CORE_NCTRS                     8
++#endif  /* ARM64_BOARD_CONFIG_A5000 */
++
+ #ifdef ARM64_BOARD_CONFIG_VMAPPLE
+ #include <pexpert/arm64/VMAPPLE.h>
+ 
+diff --git a/pexpert/pexpert/arm64/Makefile b/pexpert/pexpert/arm64/Makefile
+--- a/pexpert/pexpert/arm64/Makefile
++++ b/pexpert/pexpert/arm64/Makefile
+@@ -20,6 +20,7 @@ PRIVATE_KERNELFILES = \
+ 	VMAPPLE.h \
+ 	BCM2837.h \
+-	SWEET.h
++	SWEET.h \
++	A5000.h
+ 
+ 
+ # Headers installed into System.framework/PrivateHeaders (userspace internal SDK only).
+diff --git a/pexpert/pexpert/arm64/A5000.h b/pexpert/pexpert/arm64/A5000.h
+new file mode 100644
+--- /dev/null
++++ b/pexpert/pexpert/arm64/A5000.h
+@@ -0,0 +1,16 @@
++/*
++ * OnePlus 5 (A5000 / MSM8998) target. The existing Sweet source patches
++ * provide the first-stage GICv3, Group 1 IRQ, PSCI, timer and generic iOS
++ * services; board-specific drivers still require A5000 validation.
++ */
++#ifndef _PEXPERT_ARM64_A5000_H
++#define _PEXPERT_ARM64_A5000_H
++
++/* Reuse the current Qualcomm non-secure GICv3 and PSCI code paths. */
++#include <pexpert/arm64/SWEET.h>
++#define A5000                     1
++
++/* Kryo 280 is ARMv8-A; do not advertise v8.1 PAN without hardware proof. */
++#undef __ARM_PAN_AVAILABLE__
++
++#endif /* _PEXPERT_ARM64_A5000_H */
+diff --git a/iokit/Kernel/arm/SweetCPU.cpp b/iokit/Kernel/arm/SweetCPU.cpp
+--- a/iokit/Kernel/arm/SweetCPU.cpp
++++ b/iokit/Kernel/arm/SweetCPU.cpp
+@@ -78,9 +78,15 @@ SweetCPU::start(IOService *provider)
+ 	if (*(const uint32_t *)reg->getBytesNoCopy() != cpu->phys_id) {
+ 		return false;
+ 	}
++#if defined(A5000)
++	const bool valid_mpidr = cpu->phys_id <= 3 ||
++	    (cpu->phys_id >= 0x100 && cpu->phys_id <= 0x103);
++	if (!valid_mpidr || topology->num_cpus > SWEET_SMP_MAX_CPUS) {
++#else
+ 	/* MPIDR Aff1 = core: 0x000-0x500 A55, 0x600/0x700 A76 */
+ 	if (cpu->phys_id > 0x700 || (cpu->phys_id & 0xff) != 0 ||
+ 	    topology->num_cpus > SWEET_SMP_MAX_CPUS) {
++#endif
+ 		panic("SWEET CPU: invalid topology cpu=%u mpidr=0x%x count=%u",
+ 		    cpu->cpu_id, cpu->phys_id, topology->num_cpus);
+ 	}
+@@ -103,6 +108,10 @@ SweetCPU::start(IOService *provider)
+ 		return false;
+ 	}
++#if defined(A5000)
++	cpuName = OSSymbol::withCStringNoCopy("Kryo 280");
++#else
+ 	cpuName = OSSymbol::withCStringNoCopy("Kryo 470");
++#endif
+ 	if (cpuName == NULL) {
+ 		return false;
+ 	}
+-- 
+2.39.5

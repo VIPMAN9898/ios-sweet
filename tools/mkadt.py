@@ -39,6 +39,16 @@ VTIMER_INTID = 19
 QEMU_GICD, QEMU_GICR, QEMU_TIMEBASE = 0x08000000, 0x080a0000, 62500000
 QEMU_VTIMER_INTID = 27
 
+# OnePlus 5 / A5000 values from the captured TWRP live FDT. Keep the initial
+# XNU aperture to the contiguous free tail of the low bank, above fixed
+# Qualcomm carve-outs; the separate high bank is omitted for now.
+A5000_PHYS_BASE, A5000_MEM_SIZE = 0xb0000000, 0x50000000
+A5000_GICD, A5000_GICR = 0x17a00000, 0x17b00000
+A5000_FB, A5000_FB_SIZE = 0x9d400000, 0x2400000
+A5000_FB_W, A5000_FB_H, A5000_FB_STRIDE = 1080, 1920, 1080 * 4
+A5000_UFS, A5000_UFS_SIZE = 0x01da4000, 0x2500
+A5000_ECID = 0x4135303030000001  # synthetic; not device data
+
 BOOT_MANIFEST_HASH = hashlib.sha384(b'sweet boot manifest').digest()
 
 # The iOS userland is the iPhone X (iPhone10,3 / D22AP) IPSW. MobileGestalt
@@ -74,13 +84,23 @@ def node(name, props=(), children=()):
     return n
 
 
-def build(seed=None, qemu=False, highmem=False):
+def build(seed=None, qemu=False, highmem=False, a5000=False):
     """qemu=True: same tree, but with QEMU virt's GIC addresses and CNTFRQ (tools/qemu-sweet.py)."""
-    phys_base, mem_size = (HIGH_PHYS_BASE, HIGH_MEM_SIZE) if highmem else (PHYS_BASE, MEM_SIZE)
+    if a5000 and (qemu or highmem):
+        raise ValueError('A5000 profile currently supports only its conservative low-memory map')
+    if a5000:
+        phys_base, mem_size = A5000_PHYS_BASE, A5000_MEM_SIZE
+        gicd, gicr, timebase = A5000_GICD, A5000_GICR, TIMEBASE
+        fb, fb_size, fb_w, fb_h, fb_stride = A5000_FB, A5000_FB_SIZE, A5000_FB_W, A5000_FB_H, A5000_FB_STRIDE
+        ufs, ufs_size = A5000_UFS, A5000_UFS_SIZE
+    else:
+        phys_base, mem_size = (HIGH_PHYS_BASE, HIGH_MEM_SIZE) if highmem else (PHYS_BASE, MEM_SIZE)
+        gicd, gicr, timebase = (QEMU_GICD, QEMU_GICR, QEMU_TIMEBASE) if qemu else (GICD, GICR, TIMEBASE)
+        fb, fb_size, fb_w, fb_h, fb_stride = FB, FB_SIZE, FB_W, FB_H, FB_STRIDE
+        ufs, ufs_size = UFS, UFS_SIZE
     # Carve the panic log off the top so the kernel never allocates over it.
     panic_base = phys_base + mem_size - PANIC_LOG_SIZE
     mem_size -= PANIC_LOG_SIZE
-    gicd, gicr, timebase = (QEMU_GICD, QEMU_GICR, QEMU_TIMEBASE) if qemu else (GICD, GICR, TIMEBASE)
     seed = seed if seed is not None else os.urandom(64)
     phandle = iter(range(1, 1000))
     ph = lambda: ('AAPL,phandle', u32(next(phandle)))
@@ -92,8 +112,8 @@ def build(seed=None, qemu=False, highmem=False):
         ('random-seed', seed),
         ('debug-enabled', u32(1)),
         ('embedded-panic-log-size', u32(PANIC_LOG_SIZE)),
-        ('firmware-version', cstr('sweet-shim')),
-        ('system-firmware-version', cstr('sweet-shim')),
+        ('firmware-version', cstr('a5000-shim' if a5000 else 'sweet-shim')),
+        ('system-firmware-version', cstr('a5000-shim' if a5000 else 'sweet-shim')),
         # iBoot's SHA-384 of the boot manifest; /sbin/mount -P 1 exits unless
         # it exists (bind mounts /private/preboot/<hex>/usr/standalone/firmware,
         # tolerating a missing directory). Fixed stand-in value.
@@ -111,7 +131,7 @@ def build(seed=None, qemu=False, highmem=False):
         # files), so e.g. DataMigration never records LastSystemVersion and
         # migrates on every boot. Synthetic ECID (not the phone's); chip-id
         # of the A11 that the iPhone X userland expects.
-        ('unique-chip-id', struct.pack('<Q', SWEET_ECID)),
+        ('unique-chip-id', struct.pack('<Q', A5000_ECID if a5000 else SWEET_ECID)),
         ('chip-id', u32(0x8015)),
         # Security status as on a dev-fused, undemoted board (tuple 0,0,1,1):
         # MobileGestalt reads these from /chosen, and mobileactivationd's
@@ -129,29 +149,36 @@ def build(seed=None, qemu=False, highmem=False):
         # with CSR_ALLOW_UNRESTRICTED_FS (vm_unix.c shared region checks).
         node('asmb', [ph(), ('lp-sip0', u64(0x6f)), ('lp-sip1', u32(1))])])
 
-    # SWEET SMP: all eight cores in physical-core order (0-5 Cortex-A55,
-    # 6-7 Cortex-A76), one homogeneous cluster. The kernel defaults to one
-    # and uses cpus=N to select an initial prefix (N <= 8).
-    # QEMU retains its original single-CPU tree: its MPIDRs differ from sweet.
+    # Sweet uses its existing eight-core profile. A5000 follows the live MPIDR
+    # values; upstream MSM8998 describes a four-core Kryo280 cluster in each
+    # Aff1 domain. QEMU retains its original single-core tree.
     cpu_nodes = []
-    for core in range(1 if qemu else 8):
-        cpu_nodes.append(node(f'cpu{core}', [
-            ph(),
-            ('device_type', cstr('cpu')),
-            ('compatible', cstr('qcom,kryo470') + cstr('ARM,v8')),
-            ('reg', u32(core << 8)),  # actual MPIDR Aff1:Aff0, NOT logical ID
-            ('cpu-id', u32(core)),   # descriptive: XNU assigns IDs by DT order
-            ('cluster-id', u32(0)),  # descriptive; see ml_parse_cpu_topology
-            ('cluster-type', u32(0)),  # homogeneous CLUSTER_TYPE_SMP, not AMP
-            ('die-cluster-id', u32(0)),
-            ('cluster-core-id', u32(core)),
-            ('l2-cache-id', u32(core)),  # distinct per-core L2 nodes in live FDT
-            ('l3-cache-id', u32(0)),     # shared L3
-            ('state', cstr('running' if core == 0 else 'stopped')),
-            ('timebase-frequency', u32(timebase)),
+    mpidrs = ([0, 1, 2, 3, 0x100, 0x101, 0x102, 0x103] if a5000
+              else list(range(1 if qemu else 8)))
+    for core, mpidr in enumerate(mpidrs):
+        cluster = (1 if mpidr & 0x100 else 0) if a5000 else 0
+        cluster_core = (mpidr & 0xff) if a5000 else core
+        compatible = cstr('qcom,kryo280' if a5000 else 'qcom,kryo470') + cstr('ARM,v8')
+        extra_freq_props = [] if a5000 else [
             ('clock-frequency', u32(2304000000 if core >= 6 else 1804800000)),
             ('bus-frequency', u32(100000000)),
             ('memory-frequency', u32(1866000000)),
+        ]
+        cpu_nodes.append(node(f'cpu{core}', [
+            ph(),
+            ('device_type', cstr('cpu')),
+            ('compatible', compatible),
+            ('reg', u32(mpidr)),  # actual MPIDR Aff1:Aff0, NOT logical ID
+            ('cpu-id', u32(core)),   # descriptive: XNU assigns IDs by DT order
+            ('cluster-id', u32(cluster)),  # descriptive; see ml_parse_cpu_topology
+            ('cluster-type', u32(cluster if a5000 else 0)),
+            ('die-cluster-id', u32(cluster)),
+            ('cluster-core-id', u32(cluster_core)),
+            ('l2-cache-id', u32(cluster if a5000 else core)),
+            ('l3-cache-id', u32(0)),     # shared L3
+            ('state', cstr('running' if core == 0 else 'stopped')),
+            ('timebase-frequency', u32(timebase)),
+            *extra_freq_props,
             ('peripheral-frequency', u32(timebase)),
             ('fixed-frequency', u32(timebase)),
         ]))
@@ -185,23 +212,23 @@ def build(seed=None, qemu=False, highmem=False):
             ph(),
             ('device_type', cstr('display-subsystem')),
             ('compatible', cstr('sweet,display')),
-            ('canvas-width', u32(1125)),
-            ('canvas-height', u32(2436)),
+            ('canvas-width', u32(1080 if a5000 else 1125)),
+            ('canvas-height', u32(1920 if a5000 else 2436)),
         ])])
 
     fbcon = node('sweet-fbcon', [
         ph(),
-        ('reg', u64(FB, FB_SIZE)),
-        ('width', u32(FB_W)),
-        ('height', u32(FB_H)),
-        ('stride', u32(FB_STRIDE)),
+        ('reg', u64(fb, fb_size)),
+        ('width', u32(fb_w)),
+        ('height', u32(fb_h)),
+        ('stride', u32(fb_stride)),
     ])
 
     # bsd/dev/sweet_ufs.c: the UFS host ABL leaves running (absolute physical reg).
     ufs = node('sweet-ufs', [
         ph(),
         ('compatible', cstr('qcom,ufshc')),
-        ('reg', u64(UFS, UFS_SIZE)),
+        ('reg', u64(ufs, ufs_size)),
     ])
 
     # pmap_compute_max_asids requires the node even when no overrides are set.
@@ -226,12 +253,15 @@ def build(seed=None, qemu=False, highmem=False):
     # dram-size we expose, so XNU maps it but never allocates into it.
     pram = node('pram', [ph(), ('reg', u64(panic_base) + u64(PANIC_LOG_SIZE))])
 
-    # Identity of the iPhone X whose userland runs here: compatible[0] is
-    # hw.model/hw.target (D22AP), model is hw.machine/hw.product
-    # (iPhone10,3). 'xiaomi,sweet' stays for SweetPlatformExpert matching.
+    # Identity of the iPhone X whose userland runs here is retained. Physical
+    # A5000 compatibles are included ahead of the legacy xiaomi,sweet match,
+    # which lets the current Sweet XNU platform expert bind during bring-up.
+    physical_compatibles = (cstr('oneplus,cheeseburger') + cstr('qcom,msm8998')
+                            if a5000 else cstr('xiaomi,sweet') + cstr('qcom,sm7150'))
     return node('device-tree', [
         ph(),
-        ('compatible', cstr('D22AP') + cstr('iPhone10,3') + cstr('xiaomi,sweet') + cstr('qcom,sm7150') + cstr('AppleARM')),
+        ('compatible', cstr('D22AP') + cstr('iPhone10,3') + physical_compatibles +
+                       (cstr('xiaomi,sweet') if a5000 else b'') + cstr('AppleARM')),
         ('model', cstr('iPhone10,3')),
         ('target-type', cstr('D22')),
         ('target-sub-type', cstr('D22AP')),
@@ -242,7 +272,8 @@ def build(seed=None, qemu=False, highmem=False):
 
 
 if __name__ == '__main__':
-    root = build(qemu='--qemu' in sys.argv, highmem='--highmem' in sys.argv)
+    root = build(qemu='--qemu' in sys.argv, highmem='--highmem' in sys.argv,
+                 a5000='--a5000' in sys.argv)
     blob = adt.serialize(root)
     open(sys.argv[1], 'wb').write(blob)
     if '--dump' in sys.argv:

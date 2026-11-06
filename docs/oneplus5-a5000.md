@@ -110,6 +110,50 @@ From that DTB and boot-chain evidence, record only verified values for:
 4. Display geometry and the bootloader framebuffer format/address.
 5. PMIC, key, and other hardware needed for early diagnostics.
 
+## Separate A5000 ADT profile (2026-11-06)
+
+`tools/mkadt-a5000.py OUT.adt` now emits a separate A5000-profile ADT; it does
+not change the default Sweet profile. The profile uses the captured recovery
+FDT for the RAM banks, CPU MPIDRs, PSCI timer/GIC, splash buffer, and UFS host.
+It reserves an initial contiguous kernel aperture at `0xb0000000` of
+`0x50000000` bytes, ending at 4 GiB. This starts above the fixed reservations
+listed in the captured tree. The high RAM bank is intentionally omitted until
+the loader supports a discontiguous memory map. The panic-log megabyte is
+carved off the aperture end.
+
+The CPU compatibles use `qcom,kryo280` and the two Aff1 clusters from the
+upstream MSM8998 DTS; the captured TWRP tree itself only says `arm,armv8`.
+The ADT keeps the existing iPhone X (`D22AP` / `iPhone10,3`) software identity
+and carries `oneplus,cheeseburger`, `qcom,msm8998`, plus a legacy
+`xiaomi,sweet` match needed by the current platform expert. Names such as
+`sweet-fbcon`, `sweet-ufs`, and `sweet,display` are compatibility hooks into
+the existing XNU patches, not a claim that the Sweet drivers already support
+MSM8998. This is an ADT build step only; it is not an XNU kernel or a phone
+image.
+
+Build command:
+
+```sh
+python3 tools/mkadt-a5000.py shim/out-a5000/a5000.adt
+```
+
+The A5000 CPU topology reference is [upstream Linux MSM8998 DTS](https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/qcom/msm8998.dtsi); the physical device node is [upstream OnePlus 5 DTS](https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/qcom/msm8998-oneplus-cheeseburger.dts).
+
+## A5000 XNU build configuration
+
+Patch `xnu/patches/0082-a5000-machine-config.patch` adds an `A5000` XNU
+machine configuration, keeps the kernel plain `arm64` with ARMv8-A plus
+crypto, allows the two CPU clusters, and corrects the Sweet CPU driver's
+MPIDR validation and reported CPU name for Kryo 280. It reuses existing
+Qualcomm GIC/PSCI and generic iOS bring-up code through compatibility macros.
+It has not yet been applied to or compiled with the staged XNU source.
+
+The first XNU experiment must use `cpus=1` (boot CPU MPIDR 0) and a temporary
+boot image. The other seven CPUs, UFS operation, display, keys, touch, and
+installation path still need separate validation. In particular, the current
+touch implementation is for different hardware; a successful kernel build or
+blue diagnostic screen does not establish a usable iOS port.
+
 Then create a `cheeseburger` target profile and keep its generated ADT, shim image, and build output separate from `sweet`. Only after a host-side build and review of the extracted values should a temporary boot test be planned.
 
 ## Device safety boundary
