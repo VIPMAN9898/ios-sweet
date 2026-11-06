@@ -17,7 +17,15 @@ The current `sweet` target is tied to SM7150 hardware. Its shim and Apple Device
 
 ## First implementation gate
 
-Obtain the stock boot image that matches the A5000's installed firmware and extract its device tree. The project contains no boot image or DTB; the bounded home-tree filename scan found no A5000- or `cheeseburger`-named artifacts, but did not rule out a generically named `boot.img`. Record the firmware/build provenance with the extracted DTB, and keep private dumps and serial numbers out of Git.
+A OnePlus OxygenOS 10 OTA (`OnePlus5Oxygen_23_OTA_069_all_2010292138_6700.zip`) was inspected using HTTP range reads; the 22,345,000-byte `boot.img` was extracted to `/tmp/a5000-firmware/boot.img` and passed the archive CRC check. It has Android boot header v0. The gzip kernel contains 20 embedded Qualcomm MSM8998 MTP reference DTBs, not a `oneplus,cheeseburger` board tree. The full OTA was not downloaded or installed. Keep this artifact in temporary storage; it is not a boot image for the iOS port.
+
+The available reference sources narrow the target, but do not yet establish the live bootloader tree:
+
+- The [upstream OnePlus 5 DTS](https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/qcom/msm8998-oneplus-cheeseburger.dts) sets compatible `oneplus,cheeseburger` / `qcom,msm8998` and board ID `<8 0 16859 23>`. OTA DTB entry 10 has the same board-ID tuple, while its root still identifies as a Qualcomm MSM8998 MTP base tree.
+- The [OnePlus common DTS](https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/qcom/msm8998-oneplus-common.dtsi) describes the bootloader framebuffer at `0x9d400000`, size `0x2400000`, 1080×1920, stride 4320, `a8r8g8b8`.
+- The [MSM8998 SoC DTS](https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/qcom/msm8998.dtsi) describes eight Kryo 280 cores and PSCI via SMC. OTA DTB entry 10 lists GICD `0x17a00000`, GICR `0x17b00000`, and UFS controller `0x1da4000`.
+
+Treat these as reference values only. Before using them in a build, obtain or read the A5000's actual bootloader FDT/overlay and verify its RAM banks, reservations, and controller handoff state. Keep private dumps and serial numbers out of Git. Do not add guessed hardware values.
 
 From that DTB and boot-chain evidence, record only verified values for:
 
@@ -31,4 +39,4 @@ Then create a `cheeseburger` target profile and keep its generated ADT, shim ima
 
 ## Device safety boundary
 
-This is a software-porting task. Do not flash, erase, unlock, relock, or otherwise modify the phone. Any future live boot is a separate action and requires the user's explicit instruction. The current work has not run a boot command.
+The user asked to build the A5000 target and start flashing on 2026-11-06. No boot or flash command has been run. Do not use `sweet` artifacts on the OnePlus 5. Before any persistent partition write, follow `AGENTS.md` and confirm the exact partition, image, and data impact immediately beforehand; start with a temporary boot only after an A5000-specific image has been built and reviewed.
