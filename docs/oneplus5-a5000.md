@@ -58,6 +58,24 @@ release `10`. ADB runs as the unprivileged shell user; reads of
 currently online over authorized ADB, so retain this connection for further
 read-only checks unless Fastboot is specifically needed.
 
+## First A5000 temporary boot probe (2026-11-06)
+
+Added an isolated `shim/build-a5000-diag.sh` path. It compiles only the ARM64
+entry, console, FDT reader, and `a5000_diag.c`; it appends the 20-DTB bundle
+from the official Android 10 boot image and packages an Android boot header
+v0. The probe validates the ABL-provided splash reservation before drawing,
+does not access MMIO or storage, and requests a PSCI reset after 25 seconds.
+Build artifact (temporary, ignored by Git):
+`shim/out-a5000/a5000-fdt-probe.img`, SHA-256
+`18eef9c268ff566654f5b7a86f54346ab7305f442fd6410a2e6b4706575fbaf9`.
+
+`fastboot boot` accepted the image (`Sending` and `Booting` both `OKAY`). After
+the automatic reset delay, the device again enumerated in Fastboot. This
+confirms the custom v0 image was accepted and the reset path returned to the
+bootloader; the on-screen FDT/framebuffer result still needs visual
+confirmation. This is a handoff probe, not an iOS/XNU image. No partition was
+written or erased.
+
 `tools/a5000-dtb-inspect.py` is the host-side intake tool for that evidence. It
 summarizes RAM, reserved memory, CPUs, PSCI, interrupt controllers, UFS, and
 display nodes. By default it exits with a rejection unless the root compatible
