@@ -86,6 +86,15 @@ FDT returned base `0x9d400000`, size `0x2400000`. The rebuilt image
 temporarily booted and again returned to Fastboot after the timer. The screen
 output from this corrected revision still needs confirmation.
 
+The exact-FDT header-v2 variant was built with the captured TWRP FDT as a
+separate DTB: `shim/out-a5000/a5000-live-fdt-v2.img`, SHA-256
+`70f378a2f059c378ee83e2c0c9fb9459eb9c4c54d7f37a560649537c7466d1cb`.
+Fastboot accepted it, and the user confirmed the blue screen displayed the
+probe text. After the PSCI reset cycle, stock Android reappeared over
+authorized ADB. This validates the probe’s A5000 entry, FDT and splash
+framebuffer path for a temporary boot. It still does not boot XNU or iOS and
+did not write any partition.
+
 `tools/a5000-dtb-inspect.py` is the host-side intake tool for that evidence. It
 summarizes RAM, reserved memory, CPUs, PSCI, interrupt controllers, UFS, and
 display nodes. By default it exits with a rejection unless the root compatible
@@ -105,4 +114,4 @@ Then create a `cheeseburger` target profile and keep its generated ADT, shim ima
 
 ## Device safety boundary
 
-The user asked to build the A5000 target and start flashing on 2026-11-06. No boot or flash command has been run. Do not use `sweet` artifacts on the OnePlus 5. Before any persistent partition write, follow `AGENTS.md` and confirm the exact partition, image, and data impact immediately beforehand; start with a temporary boot only after an A5000-specific image has been built and reviewed.
+The user asked to build the A5000 target and start flashing on 2026-11-06. Temporary `fastboot boot` probes have been run; no persistent partition write or erase has occurred. Do not use `sweet` artifacts on the OnePlus 5. Before any persistent partition write, follow `AGENTS.md` and confirm the exact partition, image, and data impact immediately beforehand.
