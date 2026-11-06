@@ -79,7 +79,7 @@ int fdt_splash_region(uintptr_t fdt, uint64_t *base, uint64_t *size)
 			if (depth == FDT_MAX_DEPTH)
 				return 0;
 			uintptr_t name = p;
-			uintptr_t after = skip_str(p);
+			uintptr_t after = align4(skip_str(p));
 			if (after > end_struct)
 				return 0;
 			struct fdt_node_state *n = &stack[depth];

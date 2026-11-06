@@ -76,6 +76,16 @@ bootloader; the on-screen FDT/framebuffer result still needs visual
 confirmation. This is a handoff probe, not an iOS/XNU image. No partition was
 written or erased.
 
+The first probe revision did not show the diagnostic screen. Review found that
+the FDT reader had not aligned the node name terminator to four bytes; this
+could skip the splash reservation and take the no-display reset path. After
+fixing that, a host invocation of the same parser against the captured TWRP
+FDT returned base `0x9d400000`, size `0x2400000`. The rebuilt image
+(`shim/out-a5000/a5000-fdt-probe.img`, SHA-256
+`392d28460cf74894dc02cf74a4eac8b0ecd54d195f2a8bf16ab5e432e176a43d`) was
+temporarily booted and again returned to Fastboot after the timer. The screen
+output from this corrected revision still needs confirmation.
+
 `tools/a5000-dtb-inspect.py` is the host-side intake tool for that evidence. It
 summarizes RAM, reserved memory, CPUs, PSCI, interrupt controllers, UFS, and
 display nodes. By default it exits with a rejection unless the root compatible
