@@ -1,5 +1,16 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## New target handoff: OnePlus 5 (A5000) — 2026-11-06
+
+The user asked to start adapting this project for their OnePlus 5, model A5000. Keep the existing `sweet` (Redmi Note 10 Pro / SM7150) port intact and develop a separate `cheeseburger` / MSM8998 target. The current checkout's shim, ADT generator, memory map, display and UFS addresses, and XNU patches contain `sweet`-specific assumptions; do not reuse its boot image or hardware constants for A5000.
+
+Observed read-only device facts in this session: the user reports model A5000; Fastboot reported `product: msm8998`, `unlocked: yes`, and `secure: yes`. No serial number is recorded. The device was in Fastboot mode; ADB listed no device in that mode. The user originally prohibited flashing, erasing, or modifying the phone; that boundary still applies. No phone-modifying command has been run.
+
+**First port gate:** obtain the matching stock A5000 boot image and extract/inspect its DTB. The project contains no boot image or DTB; the bounded home-tree filename scan found no A5000- or `cheeseburger`-named artifacts, but did not rule out a generically named `boot.img`. Until the target DTB and boot chain are understood, do not add guessed MMIO, memory, framebuffer, GIC, UFS, or PMIC values. Track the port plan and evidence in `docs/oneplus5-a5000.md`.
+
+The pre-existing `sweet` handoff below remains the source of truth for the Redmi Note 10 Pro work; do not treat its phone images or active tasks as A5000 artifacts.
+
+
 ## Agent handoff / active work (2026-10-15, latest)
 
 ### >>> UPDATE 2026-10-18 (read first, then the 10-17 handoff below) <<<
