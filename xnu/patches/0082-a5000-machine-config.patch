@@ -18,7 +18,7 @@ diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
  #
 @@ -262,6 +263,6 @@ export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := $(shell echo $(CURRENT_ARCH_CONFIG) | tr A-Z a-z)
  ifneq ($(filter arm64,$(ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG)),)
- # SWEET/A5000 ARMv8 CPUs have no pointer authentication: stay plain arm64
+ # sweet's Cortex-A76/A55 have no pointer authentication: stay plain arm64
 -ifneq ($(CURRENT_MACHINE_CONFIG),SWEET)
 +ifeq ($(filter SWEET A5000,$(CURRENT_MACHINE_CONFIG)),)
  export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := arm64e
